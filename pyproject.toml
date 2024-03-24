@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "mdms-polaris"
+version = "0.1.0"
+description = "Mdms Dependencies (Poetry)"
+authors = ["Sumit Bhati <sumitbhati@polarisgrids.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.1.1"
+pytest-cov = "^4.1.0"
+black = "^24.3.0"
+isort = "^5.13.2"
+flake8 = "^7.0.0"
+bandit = "^1.7.8"
+safety = "^3.0.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
