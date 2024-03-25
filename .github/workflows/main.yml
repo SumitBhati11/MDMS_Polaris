@@ -24,5 +24,5 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          docker buildx build --platform linux/amd64,linux/arm64 -t Dockerfile:latest .
+          docker buildx build --platform linux/amd64,linux/arm64 -t sumitbhati11/mdms:latest .
           docker push sumitbhati11/mdms:latest
