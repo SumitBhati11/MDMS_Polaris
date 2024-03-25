@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: Dockerfile:latest
+      image: sumitbhati11/mdms:latest
 
     steps:
       - name: Checkout code
@@ -25,4 +25,4 @@ jobs:
       - name: Build and Push Docker Image
         run: |
           docker buildx build --platform linux/amd64,linux/arm64 -t Dockerfile:latest .
-          docker push Dockerfile:latest
+          docker push sumitbhati11/mdms:latest
