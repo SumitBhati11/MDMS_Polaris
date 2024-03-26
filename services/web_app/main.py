@@ -1,6 +1,11 @@
 from fastapi import FastAPI, UploadFile, File
 import pandas as pd
+from models import blockload as BlockLoad
+import json
 
+import os
+current_directory = os.getcwd()
+print("Current directory:", current_directory)
 app = FastAPI()
 
 
@@ -9,21 +14,36 @@ def health_check():
     return {"message": "OK"}
 
 @app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(meter_type: str, load_type: str, file: UploadFile = File(...)):
     # Check file extension
     if not file.filename.endswith((".csv", ".xlsx")):
         return {"error": "Only CSV or Excel files are allowed."}
 
-    df = pd.read_csv(file.file)
+    if load_type == "Block Load":
+        if meter_type == "1-Phase":
+            processor = BlockLoad.create_data_processor('BlockLoadPhase1')
+            data = processor.read_from_csv(file.file)
+            processed_data = processor.process_data(data)
+            processor.write_to_csv(processed_data, 'processed_block_load_data.csv')
+
+        elif meter_type == "3-Phase":
+            pass
+
+        elif meter_type == "LT_HTCT":
+            pass
+
+        else:
+            return {"Error": "Params not valid."}
+
     
     # Process the DataFrame to detect anomalies and add new columns
-    df = detect_anomalies(df)
+    # df = detect_anomalies(df)
     
     # Convert the DataFrame back to a CSV file
-    modified_csv = df.to_csv(index=False)
-    df.to_csv("modified_data.csv", index=True)
+    # modified_csv = df.to_csv(index=False)
+    # df.to_csv("modified_data.csv", index=True)
     
-    return {"modified_csv": modified_csv}
+    return {"modified_csv": "Done"}
     # Perform further processing here, such as validation, parsing, etc.
 
 def detect_anomalies(df):
