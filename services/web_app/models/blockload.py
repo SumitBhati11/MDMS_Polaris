@@ -16,14 +16,22 @@ class DataProcessor:
 class BlockLoadPhase1(DataProcessor):
     def process_data(self, data):
         # Process block load data for phase 1 meter
-        # Example processing: Add 10 to each value in the 'import_Wh' column
         data["Anomaly"] = "No"  # Assuming no anomaly initially
     
-        # Example: Detect anomalies based on conditions
-        # Replace this with your actual anomaly detection logic
-    
-        # For demonstration, let's assume an anomaly if the value in column 'import_VAh' is negative
-        data.loc[data['import_VAh'] < 0, 'Anomaly'] = "import_VAh is negative"
+        data.loc[data['import_VAh'] < 0, 'Anomaly'] = 'Yes'
+        data.loc[data['import_Wh'] < 0, 'Anomaly'] = 'Yes'
+        data.loc[data['export_VAh'] < 0, 'Anomaly'] = 'Yes'
+        data.loc[data['export_Wh'] < 0, 'Anomaly'] = 'Yes'
+        data.loc[data['avg_current'] < 0, 'Anomaly'] = 'Yes'
+        data.loc[data['avg_voltage'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['cumm_export_Wh'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['cumm_export_VAh'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['cumm_import_VAh'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['cumm_import_Wh'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['daily_cumm_active_energy_exp'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['daily_cumm_active_energy_imp'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['daily_cumm_apparent_energy_imp'] < 0, 'Anomaly'] = 'Yes'
+
         return data
 
 class BlockLoadPhase3(DataProcessor):
