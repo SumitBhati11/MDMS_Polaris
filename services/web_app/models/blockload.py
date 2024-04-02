@@ -14,16 +14,40 @@ class DataProcessor:
         data.to_csv(output_file, index=False)
 
 class BlockLoadPhase1(DataProcessor):
-    def process_data(self, data):
+    def process_data(self, data, rules_to_be_applied, rules):
         # Process block load data for phase 1 meter
+
+
+        #rules_to_be_applied formatting
+        rule_conditions = {
+            1: "import_VAh < 0",
+            2: "import_Wh < 0",
+            3: "export_VAh < 0",
+            4: "export_Wh < 0"
+            # Add more rule IDs and conditions as needed
+        }
+        # column, operator, value = rule_conditions.get(1).split()
+        # Combine conditions into a single condition string
+        # combined_condition = " and ".join(f"({condition})" for condition in rule_conditions.values())
+        mask = pd.eval(rule_conditions.get(1), engine='python', local_dict={col: data[col] for col in data.columns})
+        print(mask)
+        # Apply the combined condition to mark anomalies
         data["Anomaly"] = "No"  # Assuming no anomaly initially
-    
-        data.loc[data['import_VAh'] < 0, 'Anomaly'] = 'Yes'
-        data.loc[data['import_Wh'] < 0, 'Anomaly'] = 'Yes'
-        data.loc[data['export_VAh'] < 0, 'Anomaly'] = 'Yes'
-        data.loc[data['export_Wh'] < 0, 'Anomaly'] = 'Yes'
-        data.loc[data['avg_current'] < 0, 'Anomaly'] = 'Yes'
-        data.loc[data['avg_voltage'] < 0, 'Anomaly'] = 'Yes'
+        # Add is_valid and vee_rules[]
+
+        if mask is not None:
+            data.loc[mask, 'Anomaly'] = 'Negative Validation Fail.' # description of vee rule will be appended.
+        #data.loc[data.query(combined_condition).index, 'Anomaly'] = 'Yes'
+        # data["Anomaly"] = "No"  # Assuming no anomaly initially
+         
+
+
+        # data.loc[data['import_VAh'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['import_Wh'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['export_VAh'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['export_Wh'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['avg_current'] < 0, 'Anomaly'] = 'Yes'
+        # data.loc[data['avg_voltage'] < 0, 'Anomaly'] = 'Yes'
         # data.loc[data['cumm_export_Wh'] < 0, 'Anomaly'] = 'Yes'
         # data.loc[data['cumm_export_VAh'] < 0, 'Anomaly'] = 'Yes'
         # data.loc[data['cumm_import_VAh'] < 0, 'Anomaly'] = 'Yes'
