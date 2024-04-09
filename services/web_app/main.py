@@ -60,9 +60,9 @@ class DataGroupRuleCreate(DataGroupRuleBase):
 def get_db_connection():
     try:
         connection = psycopg2.connect(
-            dbname="postgres",
+            dbname="validation_rules",
             user="postgres",
-            password="",
+            password="Adgjmp@12",
             host="localhost",
             port="5432"
         )
@@ -104,6 +104,9 @@ def get_rules_from_group_rule_mapper(groups: list):
         
     return rule_list
 
+
+
+#################################################################################
 
 class RuleNamesRequestModel(BaseModel):
     rule_names: List[str]
@@ -216,8 +219,8 @@ async def get_groups():
 
 # Rules data fetch
 @app.get("/rules/", response_model=List[RuleCreate])
-async def get_rules():
-    query = "SELECT * FROM rules;"
+async def get_rules(meter_type :str, load_type:str):
+    query = f"SELECT * FROM rules WHERE meter_type = '{meter_type}' and load_type = '{load_type}';"
     connection = get_db_connection()
     cursor = connection.cursor()
     result = []
@@ -226,26 +229,26 @@ async def get_rules():
     cursor.execute(query)
     data = cursor.fetchall()
     connection.commit()
-    print(data)
+    print("OKAY 1")
     for item in data:
         conditions = get_conditions_for_rule(item[0])
-        rule_data = {'id': item[0], 'name': item[1], 'description': item[5], 'condition': conditions[0]}
+        rule_data = {'id': item[0], 'name': item[1], 'description': item[2], 'condition': conditions[0]}
         result.append(rule_data)
     if not data:
         raise HTTPException(status_code=404, detail="No rules found")
-    print(result)
+    print("OKAY 2")
     return result
 
 
 def get_conditions_for_rule(rule_id: int) -> List[dict]:
     conditions = []
     try:
-        query = f"SELECT * FROM rules_conditions WHERE rule_id = {rule_id};"
+        query = f"SELECT * FROM rulesconditions WHERE rule_id = {rule_id};"
         connection = get_db_connection()
         cursor = connection.cursor()
         cursor.execute(query)
         data = cursor.fetchall()
-
+        print(data)
         for item in data:
             condition_data = {
                 # 'id': item[0],
@@ -255,8 +258,8 @@ def get_conditions_for_rule(rule_id: int) -> List[dict]:
                 'value': item[5],
                 # 'days': item[6],
                 # 'parameters': item[7],
-                'created_at': item[8],
-                'updated_at': item[9]
+                'created_at': item[11],
+                'updated_at': item[12]
             }
             conditions.append(condition_data)
 
@@ -275,12 +278,20 @@ def get_conditions_for_rule(rule_id: int) -> List[dict]:
 # API endpoints to create and delete groups
 @app.post("/create_group/", response_model=RuleGroupCreate)
 async def create_group(group: RuleGroupCreate):
-    query = f"INSERT INTO rule_groups (name, description) VALUES ('{group.name}', '{group.description}');"
     connection = get_db_connection()
     if not connection:
         raise HTTPException(status_code=500, detail="Database connection error")
-    cursor = connection.cursor()
+
     try:
+        query_check = f"SELECT * FROM rule_groups WHERE name = '{group.name}';"
+        cursor = connection.cursor()
+        cursor.execute(query_check)
+        existing_group = cursor.fetchone()
+        if existing_group:
+            raise HTTPException(status_code=400, detail=f"A group with the name '{group.name}' already exists.")
+        
+        query = f"INSERT INTO rule_groups (name, description) VALUES ('{group.name}', '{group.description}');"
+
         cursor.execute(query)
         connection.commit()
         return group
@@ -293,12 +304,17 @@ async def create_group(group: RuleGroupCreate):
 
 @app.delete("/groups/{group_name}/")
 async def delete_group(group_name: str):
-    query = f"DELETE FROM rulegroups WHERE name = {group_name};"
     connection = get_db_connection()
     if not connection:
         raise HTTPException(status_code=500, detail="Database connection error")
     cursor = connection.cursor()
     try:
+        query = f"SELECT id FROM rule_groups WHERE name = '{group_name}';"
+        cursor.execute(query)
+        id = cursor.fetchone()[0]
+        if not id:
+                raise HTTPException(status_code=404, detail=f"Group: '{group_name}' not found.")
+        query = f"DELETE FROM rulegroups WHERE name = {group_name};"
         cursor.execute(query)
         connection.commit()
         return {"message": "Group deleted successfully"}
@@ -316,15 +332,24 @@ async def delete_group(group_name: str):
 # API endpoints to create and delete rules
 @app.post("/create_rule/", response_model=RuleCreate)
 async def create_rule(rule: RuleCreate):
-    query = f"INSERT INTO rules (name, description) VALUES ('{rule.name}', '{rule.description}') RETURNING id;"
-    # Pre Cumulative Checks (field_name, condition_type and value is taken)
-    # rule_condition = ConditionBase()
-    rule_condition = rule.condition
     connection = get_db_connection()
     if not connection:
         raise HTTPException(status_code=500, detail="Database connection error")
     cursor = connection.cursor()
     try:
+
+        cursor = connection.cursor()
+        query_check = f"SELECT * FROM rules r JOIN rules_conditions rc ON r.id = rc.rule_id WHERE r.name = '{rule.name}' AND rc.field_name = '{rule.condition.field_name}' AND rc.condition_type = '{rule.condition.condition_type}' AND rc.value = '{rule.condition.value}';"
+        cursor.execute(query_check)
+        existing_rule = cursor.fetchone()
+
+        if existing_rule:
+            raise HTTPException(status_code=400, detail=f"A rule with the same name '{rule.name}' and condition parameters already exists.")
+        query = f"INSERT INTO rules (name, description) VALUES ('{rule.name}', '{rule.description}') RETURNING id;"
+        # Pre Cumulative Checks (field_name, condition_type and value is taken)
+        # rule_condition = ConditionBase()
+        rule_condition = rule.condition
+
         cursor.execute(query)
         rule_id = cursor.fetchone()[0]
         print(rule_id)
@@ -341,12 +366,18 @@ async def create_rule(rule: RuleCreate):
 
 @app.delete("/rules/{rule_name}/")
 async def delete_rule(rule_name: str):
-    query = f"DELETE FROM rules WHERE name = '{rule_name}';"
+    
     connection = get_db_connection()
     if not connection:
         raise HTTPException(status_code=500, detail="Database connection error")
     cursor = connection.cursor()
     try: 
+        query = f"SELECT id FROM rules WHERE name = '{rule_name}';"
+        id = cursor.fetchone()[0]
+        if not id:
+                raise HTTPException(status_code=404, detail=f"Rule: '{rule_name}' not found.")
+        
+        query = f"DELETE FROM rules WHERE name = '{rule_name}';"
         cursor.execute(query)
         connection.commit()
         return {"message": "Rule deleted successfully"}
@@ -367,12 +398,19 @@ async def add_rules_to_group(group_name: str, rules_names: List[str]): # type: i
     if not connection:
         raise HTTPException(status_code=500, detail="Database connection error")
     cursor = connection.cursor()
+    query = f"SELECT id FROM rule_groups WHERE name = '{group_name}';"
+    cursor.execute(query)
+    id = cursor.fetchone()[0]
+    if not id:
+        raise HTTPException(status_code=404, detail=f"Group: '{group_name}' not found.")
     try: 
         for rule_name in rules_names:
-            query = f"SELECT id FROM rule_groups WHERE name = '{group_name}';"
+            query = f"SELECT id FROM rules WHERE name = '{rule_name}';"
             cursor.execute(query)
             id = cursor.fetchone()[0]
-            print(id)
+            if not id:
+                raise HTTPException(status_code=404, detail=f"Rule: '{rule_name}' not found.")
+        for rule_name in rules_names:
             query = f"UPDATE rules SET group_id = '{id}' WHERE name = '{rule_name}';"
             cursor.execute(query)
             connection.commit()
@@ -396,7 +434,9 @@ async def add_rules_to_group(group_name: str, rules_names: List[str]): # type: i
             query = f"SELECT id FROM rule_groups WHERE name = '{group_name}';"
             cursor.execute(query)
             id = cursor.fetchone()[0]
-            print(id)
+            if not id:
+                raise HTTPException(status_code=404, detail=f"Group '{rule_name}' not found.")
+
             query = f"UPDATE rules SET group_id = NULL WHERE name = '{rule_name}';"
             cursor.execute(query)
             connection.commit()
@@ -407,6 +447,8 @@ async def add_rules_to_group(group_name: str, rules_names: List[str]): # type: i
     finally:
         cursor.close()
         connection.close()
+
+
 
 
 @app.get("/db-check/")
