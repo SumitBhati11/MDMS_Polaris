@@ -283,7 +283,7 @@ def get_conditions_for_rule(rule_id: int) -> List[dict]:
 
 
 # API endpoints to create and delete groups
-@app.post("/create_group/", response_model=RuleGroupCreate)
+@app.post("/create_group/")
 async def create_group(group: RuleGroupCreate):
     connection = get_db_connection()
     if not connection:
@@ -300,8 +300,11 @@ async def create_group(group: RuleGroupCreate):
         query = f"INSERT INTO rulegroups (name, description) VALUES ('{group.name}', '{group.description}');"
 
         cursor.execute(query)
+        print("Done")
         connection.commit()
-        return {f"Successfully Added Group: '{group.name}' "}
+        print("Done2")
+        print(f"Successfully Added Group: '{group.name}'")
+        return {f"Successfully Added Group: '{group.name}'"}
     except psycopg2.Error as e:
         connection.rollback()
         raise HTTPException(status_code=500, detail="Error creating group")
@@ -318,7 +321,7 @@ async def delete_group(group_name: str):
     try:
         query = f"SELECT id FROM rulegroups WHERE name = '{group_name}';"
         cursor.execute(query)
-        id = cursor.fetchone()[0]
+        id = cursor.fetchone()
         if not id:
             raise HTTPException(status_code=404, detail=f"Group: '{group_name}' not found.")
         query = f"DELETE FROM rulegroups WHERE name = '{group_name}';"
@@ -337,7 +340,7 @@ async def delete_group(group_name: str):
 
 
 # API endpoints to create and delete groups
-@app.post("/create_head_group/", response_model=HeadGroupCreate)
+@app.post("/create_head_group/")
 async def create_head_group(group: HeadGroupCreate):
     connection = get_db_connection()
     if not connection:
@@ -347,6 +350,7 @@ async def create_head_group(group: HeadGroupCreate):
         query_check = f"SELECT * FROM headgroups WHERE group_name = '{group.name}';"
         print(query_check)
         cursor = connection.cursor()
+        cursor.execute(query_check)
         existing_group = cursor.fetchone()
         if existing_group:
             raise HTTPException(status_code=400, detail=f"A group with the name '{group.name}' already exists.")
@@ -371,9 +375,9 @@ async def delete_group(group_name: str):
         raise HTTPException(status_code=500, detail="Database connection error")
     cursor = connection.cursor()
     try:
-        query = f"SELECT id FROM headgroups WHERE group_name = '{group_name}';"
+        query = f"SELECT * FROM headgroups WHERE group_name = '{group_name}';"
         cursor.execute(query)
-        id = cursor.fetchone()[0]
+        id = cursor.fetchone()
         if not id:
             raise HTTPException(status_code=404, detail=f"Group: '{group_name}' not found.")
         query = f"DELETE FROM headgroups WHERE group_name = '{group_name}';"
@@ -465,14 +469,15 @@ async def add_rules_to_group(group_name: str, rules_names: List[str]): # type: i
         for rule_name in rules_names:
             query = f"SELECT id FROM rules WHERE name = '{rule_name}';"
             cursor.execute(query)
-            id = cursor.fetchone()[0]
+            id = cursor.fetchone()
             if not id:
-                raise HTTPException(status_code=404, detail=f"Rule: '{rule_name}' not found.")
+                raise HTTPException(status_code=404, detail=f"Rule: '{rule_name}' not found. Note: No rules added.")
         for rule_name in rules_names:
             query = f"SELECT id FROM rules WHERE name = '{rule_name}';"
             cursor.execute(query)
-            id = cursor.fetchone()
-            query = f"INSERT INTO rulegroupmapping (group_id, rule_id) VALUES ('{group_id}','{id}');"
+            id = cursor.fetchone()[0]
+            print(id)
+            query = f"INSERT INTO rulegroupmapping (group_id, rule_id) VALUES ('{group_id[0]}','{id}');"
             cursor.execute(query)
             connection.commit()
         return {"message": f"Rules added to group {group_name} successfully"}
@@ -496,13 +501,13 @@ async def delete_rules_to_group(group_name: str, rules_names: List[str]): # type
             cursor.execute(query)
             group_id = cursor.fetchone()
             if not id:
-                raise HTTPException(status_code=404, detail=f"Group '{rule_name}' not found.")
+                raise HTTPException(status_code=404, detail=f"Group '{rule_name}' not found. Note: No rules deleted.")
             
             for rule in rules_names:
                 query = f"SELECT id FROM rules WHERE name = '{rule}';"
                 cursor.execute(query)
-                rule_id = cursor.fetchone()
-                query = f"DELETE FROM rulegroupmapping WHERE rule_id = '{rule_id}' AND group_id = '{group_id}';"
+                rule_id = cursor.fetchone()[0]
+                query = f"DELETE FROM rulegroupmapping WHERE rule_id = '{rule_id}' AND group_id = '{group_id[0]}';"
                 cursor.execute(query)
                 connection.commit()
         return {"message": f"Rules removed from group {group_name} successfully"}
@@ -531,14 +536,14 @@ async def add_rules_to_head_group(group_name: str, rules_names: List[str]): # ty
         for rule_name in rules_names:
             query = f"SELECT id FROM rules WHERE name = '{rule_name}';"
             cursor.execute(query)
-            id = cursor.fetchone()[0]
+            id = cursor.fetchone()
             if not id:
-                raise HTTPException(status_code=404, detail=f"Rule: '{rule_name}' not found.")
+                raise HTTPException(status_code=404, detail=f"Rule: '{rule_name}' not found. Note: No rules added.")
         for rule_name in rules_names:
             query = f"SELECT id FROM rules WHERE name = '{rule_name}';"
             cursor.execute(query)
-            id = cursor.fetchone()
-            query = f"INSERT INTO headgroups_rules_mapping (head_group_id, rule_id) VALUES ('{group_id}','{id}');"
+            id = cursor.fetchone()[0]
+            query = f"INSERT INTO headgroups_rules_mapping (head_group_id, rule_id) VALUES ('{group_id[0]}','{id}');"
             cursor.execute(query)
             connection.commit()
         return {"message": f"Rules added to head group {group_name} successfully"}
@@ -562,15 +567,15 @@ async def delete_rules_to_head_group(group_name: str, rules_names: List[str]): #
             cursor.execute(query)
             group_id = cursor.fetchone()
             if not id:
-                raise HTTPException(status_code=404, detail=f"Group '{rule_name}' not found.")
+                raise HTTPException(status_code=404, detail=f"Group '{rule_name}' not found. Note: No rules deleted.")
             
-            for rule in rules_names:
-                query = f"SELECT id FROM rules WHERE name = '{rule}';"
-                cursor.execute(query)
-                rule_id = cursor.fetchone()
-                query = f"DELETE FROM headgroups_rules_mapping WHERE rule_id = '{rule_id}' AND head_group_id = '{group_id}';"
-                cursor.execute(query)
-                connection.commit()
+        for rule in rules_names:
+            query = f"SELECT id FROM rules WHERE name = '{rule}';"
+            cursor.execute(query)
+            rule_id = cursor.fetchone()[0]
+            query = f"DELETE FROM headgroups_rules_mapping WHERE rule_id = '{rule_id}' AND head_group_id = '{group_id[0]}';"
+            cursor.execute(query)
+            connection.commit()
         return {"message": f"Rules removed from head group {group_name} successfully"}
     except psycopg2.Error as e:
         connection.rollback()
@@ -586,7 +591,7 @@ async def add_group_to_head_group(head_group_name: str, groups_names: List[str])
     if not connection:
         raise HTTPException(status_code=500, detail="Database connection error")
     cursor = connection.cursor()
-    query = f"SELECT id FROM headgroups WHERE group_name = '{head_group_name}';"
+    query = f"SELECT group_id FROM headgroups WHERE group_name = '{head_group_name}';"
     cursor.execute(query)
     head_group_id = cursor.fetchone()
     if not head_group_id:
@@ -595,48 +600,53 @@ async def add_group_to_head_group(head_group_name: str, groups_names: List[str])
         for group_name in groups_names:
             query = f"SELECT id FROM rulegroups WHERE name = '{group_name}';"
             cursor.execute(query)
-            id = cursor.fetchone()[0]
+            id = cursor.fetchone()
             if not id:
-                raise HTTPException(status_code=404, detail=f"Group: '{group_name}' not found.")
+                raise HTTPException(status_code=404, detail=f"Group: '{group_name}' not found. Note: no groups added.")
         for group_name in groups_names:
             query = f"SELECT id FROM rulegroups WHERE name = '{group_name}';"
             cursor.execute(query)
             group_id = cursor.fetchone()[0]
-            query = f"INSERT INTO headgroups_rulegroups_mapping (head_group_id, rule_group_id) VALUES ('{head_group_id}','{group_id}');"
+            query = f"INSERT INTO headgroups_rulegroups_mapping (head_group_id, rule_group_id) VALUES ('{head_group_id[0]}','{group_id}');"
             cursor.execute(query)
             connection.commit()
-        return {"message": f"Rules added to group {head_group_name} successfully"}
+        return {"message": f"Groups added to group {head_group_name} successfully"}
     except psycopg2.Error as e:
         connection.rollback()
-        raise HTTPException(status_code=500, detail="Error adding rules")
+        raise HTTPException(status_code=500, detail="Error adding groups")
     finally:
         cursor.close()
         connection.close()
     
 
 @app.delete("/delete_group_from_head_group/")
-async def delete_group_from_head_group(group_name: str, rules_names: List[str]): # type: ignore
+async def delete_group_from_head_group(head_group_name: str, group_names: List[str]): # type: ignore
     connection = get_db_connection()
     if not connection:
         raise HTTPException(status_code=500, detail="Database connection error")
     cursor = connection.cursor()
+    query = f"SELECT group_id FROM headgroups WHERE group_name = '{head_group_name}';"
+    cursor.execute(query)
+    head_group_id = cursor.fetchone()
+    if not head_group_id:
+        raise HTTPException(status_code=404, detail=f"Group: '{head_group_name}' not found.")
     try: 
-        for rule_name in rules_names:
-            query = f"SELECT id FROM rulegroups WHERE group_name = '{group_name}';"
+        for group_name in group_names:
+            query = f"SELECT id FROM rulegroups WHERE name = '{group_name}';"
             cursor.execute(query)
-            group_id = cursor.fetchone()
+            head_group_id = cursor.fetchone()
             if not id:
-                raise HTTPException(status_code=404, detail=f"Group '{rule_name}' not found.")
+                raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found. Note: No groups deleted.")
             
-            for rule in rules_names:
-                query = f"SELECT * FROM rules WHERE name = '{rule}';"
-                cursor.execute(query)
-                rule_id = cursor.fetchone()[0]
-                print(rule_id)
-                query = f"DELETE FROM headgroups_rulegroups_mapping WHERE rule_id = '{rule_id}' AND group_id = '{group_id}';"
-                cursor.execute(query)
-                connection.commit()
-        return {"message": f"Rules removed from group {group_name} successfully"}
+        for group_name in group_names:
+            query = f"SELECT id FROM rulegroups WHERE name = '{group_name}';"
+            cursor.execute(query)
+            group_id = cursor.fetchone()[0]
+            print(group_id)
+            query = f"DELETE FROM headgroups_rulegroups_mapping WHERE rule_group_id = '{group_id}' AND head_group_id = '{head_group_id[0]}';"
+            cursor.execute(query)
+            connection.commit()
+        return {"message": f"Rules removed from group {head_group_name} successfully"}
     except psycopg2.Error as e:
         connection.rollback()
         raise HTTPException(status_code=500, detail="Error removing rules")
