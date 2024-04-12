@@ -14,18 +14,17 @@ class DataProcessor:
         data.to_csv(output_file, index=False)
 
 class BlockLoadPhase1(DataProcessor):
-    def process_data(self, data, rules_to_be_applied, rules):
+    def process_data(self, df, rules_to_be_applied):
         # Process block load data for phase 1 meter
-
-
+        return apply_rules_to_dataframe(df, rules_to_be_applied);
         #rules_to_be_applied formatting
-        rule_conditions = {
-            1: "import_VAh < 0",
-            2: "import_Wh < 0",
-            3: "export_VAh < 0",
-            4: "export_Wh < 0"
-            # Add more rule IDs and conditions as needed
-        }
+        # rule_conditions = {
+        #     1: "import_VAh < 0",
+        #     2: "import_Wh < 0",
+        #     3: "export_VAh < 0",
+        #     4: "export_Wh < 0"
+        #     # Add more rule IDs and conditions as needed
+        # }
         # column, operator, value = rule_conditions.get(1).split()
         # Combine conditions into a single condition string
         # combined_condition = " and ".join(f"({condition})" for condition in rule_conditions.values())
@@ -79,3 +78,35 @@ def create_data_processor(data_type):
         return BlockLoadLTCT();
     # Add more conditions for other data types
 
+
+def apply_rules_to_dataframe(df, rules):
+        # Initialize an empty column to store anomalies
+        df['VEE_Rules_Failed'] = ''
+
+        # Iterate over each rule
+        for rule in rules:
+            field_name = rule['condition']['field_name']
+            condition_type = rule['condition']['condition_type']
+            value = float(rule['condition']['value'])  # Convert value to float for comparison
+            try: 
+                # Evaluate condition for each row in DataFrame
+                if condition_type == 'LESS_THAN_OR_EQUAL_TO':
+                    mask = df[field_name] > value
+                elif condition_type == 'GREATER_THAN_OR_EQUAL_TO':
+                    mask = df[field_name] < value
+                else:
+                    continue  # Handle other condition types if needed
+
+                # Mark anomalies in DataFrame based on rule evaluation
+                rule_description = f"Rule {rule['id']}: {rule['name']} - {rule['description']}"
+                print(rule_description)
+                df.loc[mask, 'VEE_Rules_Failed'] += rule_description + '\n'
+
+            except KeyError:
+                print(f"Column '{field_name}' not found in DataFrame. Skipping rule {rule['id']}.")
+
+            
+        # Strip any trailing newline characters in the 'Anomaly' column
+        df['VEE_Rules_Failed'] = df['VEE_Rules_Failed'].str.rstrip('\n')
+
+        return df

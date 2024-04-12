@@ -142,6 +142,32 @@ def get_rules_by_rule_names(rules: RuleNamesRequestModel):
     return result  
 
 
+
+# Function to get rule data from rule_ids
+
+def get_rules_by_rule_id(rule_ids):
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    result = []
+    if not connection:
+        raise HTTPException(status_code=500, detail="Database connection error")
+    rule_name_tuple = tuple(rule_ids)
+    query = f"SELECT * FROM rules where id in %s;"
+    cursor.execute(query, (rule_name_tuple,))
+    data = cursor.fetchall()
+    result = []
+    connection.commit()
+    for item in data:
+        conditions = get_conditions_for_rule(item[0])
+        rule_data = {'id': item[0], 'name': item[1], 'description': item[2], 'condition': conditions[0]}
+        result.append(rule_data)
+    
+    if not data:
+        raise HTTPException(status_code=404, detail="No rule found")    
+    return result  
+
+
+
 # Function to fetch data from the database
 def fetch_data(query, connection):
     try:
@@ -685,32 +711,104 @@ async def upload_file(meter_type: str, load_type: str, file: UploadFile = File(.
         return {"error": "Only CSV are allowed."}
 
     if load_type == "Block Load":
-        if meter_type == "1-Phase":
+        if meter_type == "Phase-1":
             processor = BlockLoad.create_data_processor('BlockLoadPhase1')
             data = processor.read_from_csv(file.file)
-            groups = await get_groups()
-            rules = await get_rules()
+            connection = get_db_connection()
+            if not connection:
+                raise HTTPException(status_code=500, detail="Database connection error")
+            cursor = connection.cursor()
+            meter_type = "P-1"
+            load_type = "BL"
+            query = f"SELECT group_id FROM headgroups WHERE meter_type = '{meter_type}' and load_type = '{load_type}';"
+            cursor.execute(query)
+            head_group_id = cursor.fetchone()
+            if not head_group_id:
+                raise HTTPException(status_code=404, detail=f"Head Group not found.")
+            
+            head_group_id = head_group_id[0]
+
+            print(head_group_id)
+
+            # groups fetch 
+
+            query = f"SELECT rule_group_id FROM headgroups_rulegroups_mapping WHERE head_group_id = '{head_group_id}';"
+            cursor.execute(query)
+            group_ids = cursor.fetchall()
+
+            print(group_ids)
+
+            # Extracting group IDs from the fetched result
+            group_id_list = [str(group[0]) for group in group_ids]
+
+            # Joining the IDs into a comma-separated string for the IN clause
+            group_id_str = ','.join(group_id_list)
+
+            # rules fetch from groups
+
+            query = f"SELECT rule_id FROM rulegroupmapping WHERE group_id in ({group_id_str});"
+
+            cursor.execute(query)
+            rule_ids_from_rule_groups = cursor.fetchall()
+
+            print(rule_ids_from_rule_groups)
+
+            # Extracting group IDs from the fetched result
+            rule_id_list = [str(rule[0]) for rule in rule_ids_from_rule_groups]
+
+            # Joining the IDs into a comma-separated string for the IN clause
+            #rule_id_str = ','.join(rule_id_list)
+
+
+
+
+
+
+            # individual rules fetch
+
+
+            query = f"SELECT rule_id FROM headgroups_rules_mapping WHERE head_group_id = '{head_group_id}';"
+            cursor.execute(query)
+            rule_ids_from_head_group = cursor.fetchall()
+
+            print(rule_ids_from_head_group)
+
+            # Extracting group IDs from the fetched result
+            rule_id_list2 = [str(rule[0]) for rule in rule_ids_from_head_group]
+
+
+             # add all the rules 
+            rule_id_list.extend(rule_id_list2)
+
+
+            rule_id_str = ','.join(rule_id_list)
+            
+            
+            print(rule_id_str)
+            # send them to evaluate
+
+
+            # groups = await get_groups()
+            # rules = await get_rules()
             # db->user type => List of groups and list of rules
-            data_type_mapper = get_data_groups_rules('blockloadPhase1')
-            print(data_type_mapper)
+            # data_type_mapper = get_data_groups_rules('blockloadPhase1')
             # group_belongs = [3] # user(data) -> groups/rules
             # rule_belong = [4]
 
-            rules_to_be_applied = []
-            groups_list = data_type_mapper.get('list_of_groups')
-            rules_list = data_type_mapper.get('list_of_rules')
-            rules_from_groups = get_rules_from_group_rule_mapper(groups_list)
+            # groups_list = data_type_mapper.get('list_of_groups')
+            # rules_list = data_type_mapper.get('list_of_rules')
+            #  rules_from_groups = get_rules_from_group_rule_mapper(groups_list)
             
-            for item in rules_list:
-                rules_to_be_applied.append(item)
-            for item in rules_from_groups:
-                rules_to_be_applied.append(item)
-            print(rules_to_be_applied)
-            rule_ids_model = RuleIdsRequestModel()
-            rule_ids_model.rule_ids = rules_to_be_applied
-            rules_data = get_rules_by_rule_id(rules_to_be_applied)
+            # for item in rules_list:
+            #     rules_to_be_applied.append(item)
+            # for item in rules_from_groups:
+            #     rules_to_be_applied.append(item)
+            # print(rules_to_be_applied)
+            # rule_ids_model = RuleIdsRequestModel()
+            # rule_ids_model.rule_ids = rules_to_be_applied
+            rules_data = get_rules_by_rule_id(rule_id_list)
             
-            processed_data = processor.process_data(data, rules_to_be_applied, rules_data)
+            processed_data = processor.process_data(data, rules_data)
             processor.write_to_csv(processed_data, 'processed_block_load_data.csv')
 
         elif meter_type == "3-Phase":
