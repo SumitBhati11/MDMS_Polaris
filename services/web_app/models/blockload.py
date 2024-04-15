@@ -16,7 +16,7 @@ class DataProcessor:
 class BlockLoadPhase1(DataProcessor):
     def process_data(self, df, rules_to_be_applied):
         # Process block load data for phase 1 meter
-        return apply_rules_to_dataframe(df, rules_to_be_applied);
+        return apply_rules_to_dataframe(self, df, rules_to_be_applied);
         #rules_to_be_applied formatting
         # rule_conditions = {
         #     1: "import_VAh < 0",
@@ -75,16 +75,18 @@ def create_data_processor(data_type):
     elif data_type == 'BlockLoadPhase3':
         return BlockLoadPhase3()
     elif data_type == 'BlockLoadLTCT':
-        return BlockLoadLTCT();
+        return BlockLoadLTCT()
     # Add more conditions for other data types
 
 
-def apply_rules_to_dataframe(df, rules):
+def apply_rules_to_dataframe(self, df, rules):
         # Initialize an empty column to store anomalies
-        df['VEE_Rules_Failed'] = ''
-
+        df['vee_rules_failed'] = ''
+        df['is_valid'] = True
+        rule_failure_dict = {}
         # Iterate over each rule
         for rule in rules:
+            rule_id = rule['id']
             field_name = rule['condition']['field_name']
             condition_type = rule['condition']['condition_type']
             value = float(rule['condition']['value'])  # Convert value to float for comparison
@@ -100,13 +102,24 @@ def apply_rules_to_dataframe(df, rules):
                 # Mark anomalies in DataFrame based on rule evaluation
                 rule_description = f"Rule {rule['id']}: {rule['name']} - {rule['description']}"
                 print(rule_description)
-                df.loc[mask, 'VEE_Rules_Failed'] += rule_description + '\n'
+                df.loc[mask, 'vee_rules_failed'] += rule_description + '\n'
+                df.loc[mask, 'is_valid'] = False
 
             except KeyError:
                 print(f"Column '{field_name}' not found in DataFrame. Skipping rule {rule['id']}.")
 
-            
-        # Strip any trailing newline characters in the 'Anomaly' column
-        df['VEE_Rules_Failed'] = df['VEE_Rules_Failed'].str.rstrip('\n')
+            failed_meter_ids = df.loc[mask, 'meter_number'].tolist()
+            if rule_id not in rule_failure_dict:
+                rule_failure_dict[rule_id] = failed_meter_ids
+            else:
+                rule_failure_dict[rule_id].extend(failed_meter_ids)
 
-        return df
+
+        # Strip any trailing newline characters in the 'Anomaly' column
+        df['vee_rules_failed'] = df['vee_rules_failed'].str.rstrip('\n')
+
+        self.write_to_csv(df, 'processed_block_load_data.csv')
+
+        print(rule_failure_dict)
+
+        return rule_failure_dict

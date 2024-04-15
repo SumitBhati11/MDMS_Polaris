@@ -36,8 +36,8 @@ class RuleCreate(RuleBase):
     # user_type:str
     condition: ConditionBase
     # actions: Optional[str]
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
+    # created_at: Optional[datetime]
+    # updated_at: Optional[datetime]
 
 class RuleGroupBase(BaseModel):
     name: str
@@ -546,6 +546,20 @@ async def delete_rules_to_group(group_name: str, rules_names: List[str]): # type
 
 
 
+@app.get("/fetch_head_groups/",response_model=List[RuleGroupCreate])
+async def get_head_groups():
+    query = "SELECT * FROM headgroups;"
+    connection = get_db_connection()
+    if not connection:
+        raise HTTPException(status_code=500, detail="Database connection error")
+    data = fetch_data(query, connection)
+    if not data:
+        raise HTTPException(status_code=404, detail="No groups found")
+    print(data)
+    result = [{'id': item[0], 'name': item[1], 'description': item[2]} for item in data]
+    #json_string = json.dumps(result)
+    return result
+
 
 @app.post("/add_rules_to_head_group/")
 async def add_rules_to_head_group(group_name: str, rules_names: List[str]): # type: ignore
@@ -806,10 +820,17 @@ async def upload_file(meter_type: str, load_type: str, file: UploadFile = File(.
             # print(rules_to_be_applied)
             # rule_ids_model = RuleIdsRequestModel()
             # rule_ids_model.rule_ids = rules_to_be_applied
+
+            query = f"SELECT * FROM headgroups_rulegroups_mapping WHERE head_group_id = '{head_group_id}';"
+
+            cursor.execute(query)
+            groups_details = cursor.fetchall()
             rules_data = get_rules_by_rule_id(rule_id_list)
             
             processed_data = processor.process_data(data, rules_data)
-            processor.write_to_csv(processed_data, 'processed_block_load_data.csv')
+            final_response = organize_meter_numbers_by_group(processed_data)
+            final_response['total_size'] = data.shape[0]
+            return final_response
 
         elif meter_type == "3-Phase":
             pass
@@ -819,7 +840,114 @@ async def upload_file(meter_type: str, load_type: str, file: UploadFile = File(.
 
         else:
             return {"Error": "Params not valid."}
-        
+    
+    if load_type == "Instantaneous Profile":
+        if meter_type == "Phase-1":
+            processor = BlockLoad.create_data_processor('BlockLoadPhase1')
+            data = processor.read_from_csv(file.file)
+            connection = get_db_connection()
+            if not connection:
+                raise HTTPException(status_code=500, detail="Database connection error")
+            cursor = connection.cursor()
+            meter_type = "P-1"
+            load_type = "IP"
+            query = f"SELECT group_id FROM headgroups WHERE meter_type = '{meter_type}' and load_type = '{load_type}';"
+            cursor.execute(query)
+            head_group_id = cursor.fetchone()
+            if not head_group_id:
+                raise HTTPException(status_code=404, detail=f"Head Group not found.")
+            
+            head_group_id = head_group_id[0]
+
+            print(head_group_id)
+
+            # groups fetch 
+
+            query = f"SELECT rule_group_id FROM headgroups_rulegroups_mapping WHERE head_group_id = '{head_group_id}';"
+            cursor.execute(query)
+            group_ids = cursor.fetchall()
+
+            print(group_ids)
+
+            # Extracting group IDs from the fetched result
+            group_id_list = [str(group[0]) for group in group_ids]
+
+            # Joining the IDs into a comma-separated string for the IN clause
+            group_id_str = ','.join(group_id_list)
+
+            # rules fetch from groups
+
+            query = f"SELECT rule_id FROM rulegroupmapping WHERE group_id in ({group_id_str});"
+
+            cursor.execute(query)
+            rule_ids_from_rule_groups = cursor.fetchall()
+
+            print(rule_ids_from_rule_groups)
+
+            # Extracting group IDs from the fetched result
+            rule_id_list = [str(rule[0]) for rule in rule_ids_from_rule_groups]
+
+            # Joining the IDs into a comma-separated string for the IN clause
+            #rule_id_str = ','.join(rule_id_list)
+
+
+
+
+
+
+            # individual rules fetch
+
+
+            query = f"SELECT rule_id FROM headgroups_rules_mapping WHERE head_group_id = '{head_group_id}';"
+            cursor.execute(query)
+            rule_ids_from_head_group = cursor.fetchall()
+
+            print(rule_ids_from_head_group)
+
+            # Extracting group IDs from the fetched result
+            rule_id_list2 = [str(rule[0]) for rule in rule_ids_from_head_group]
+
+
+             # add all the rules 
+            rule_id_list.extend(rule_id_list2)
+
+
+            rule_id_str = ','.join(rule_id_list)
+            
+            
+            print(rule_id_str)
+            # send them to evaluate
+
+
+            # groups = await get_groups()
+            # rules = await get_rules()
+            # db->user type => List of groups and list of rules
+            # data_type_mapper = get_data_groups_rules('blockloadPhase1')
+            # group_belongs = [3] # user(data) -> groups/rules
+            # rule_belong = [4]
+
+            # groups_list = data_type_mapper.get('list_of_groups')
+            # rules_list = data_type_mapper.get('list_of_rules')
+            #  rules_from_groups = get_rules_from_group_rule_mapper(groups_list)
+            
+            # for item in rules_list:
+            #     rules_to_be_applied.append(item)
+            # for item in rules_from_groups:
+            #     rules_to_be_applied.append(item)
+            # print(rules_to_be_applied)
+            # rule_ids_model = RuleIdsRequestModel()
+            # rule_ids_model.rule_ids = rules_to_be_applied
+
+            query = f"SELECT * FROM headgroups_rulegroups_mapping WHERE head_group_id = '{head_group_id}';"
+
+            cursor.execute(query)
+            groups_details = cursor.fetchall()
+            rules_data = get_rules_by_rule_id(rule_id_list)
+            
+            processed_data = processor.process_data(data, rules_data)
+            final_response = organize_meter_numbers_by_group(processed_data)
+            final_response['total_size'] = data.shape[0]
+            return final_response
 
     
     return {"modified_csv": "Done"}
@@ -830,6 +958,37 @@ async def upload_file(meter_type: str, load_type: str, file: UploadFile = File(.
 #     # Initialize the database when the application starts
 #     initialize_database()
 
+
+
+def organize_meter_numbers_by_group(rule_failure_dict):
+    # Initialize a dictionary to store failed meter numbers grouped by group_id
+    group_wise_failed_meter_numbers = {}
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    # Iterate over each rule_id in the rule_failure_dict
+    for rule_id, failed_meter_ids in rule_failure_dict.items():
+        # Find the group_id corresponding to the current rule_id
+        query = f"SELECT group_id FROM rulegroupmapping WHERE rule_id ='{rule_id}';"
+        cursor.execute(query)
+        group_id = cursor.fetchone()
+        group_id = group_id[0]
+        print(group_id)
+        query = f"SELECT name FROM rulegroups WHERE id ='{group_id}';"
+        cursor.execute(query)
+
+        group_name = cursor.fetchone()
+        group_name = group_name[0]
+        print(group_name)
+
+        # Add failed_meter_ids to the corresponding group_id in the dictionary
+        if group_name:
+            if group_name not in group_wise_failed_meter_numbers:
+                group_wise_failed_meter_numbers[group_name] = failed_meter_ids
+            else:
+                group_wise_failed_meter_numbers[group_name].extend(failed_meter_ids)
+    print(group_wise_failed_meter_numbers)
+    return group_wise_failed_meter_numbers
 
 if __name__ == "__main__":
     import uvicorn
